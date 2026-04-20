@@ -28,6 +28,7 @@ const publicSites = [
   { name: 'CSOB Premium', url: 'https://www.csobpremium.cz/' },
   { name: 'CSOB Private Banking', url: 'https://www.csobpb.cz/' },
   { name: 'Platba Kartou CSOB', url: 'https://platbakartou.csob.cz/' },
+  { name: 'CSOB Pojistovna', url: 'https://www.csobpoj.cz/' },
 ];
 
 // Private zones mapped to their parent's name
@@ -38,6 +39,7 @@ const privateZones = [
   { name: 'CSOB Penze Online', url: 'https://online.csob-penze.cz/', parent: 'CSOB Penze' },
   { name: 'Moje CSOB Stavebni', url: 'https://moje.csobstavebni.cz/', parent: 'CSOB Stavebni' },
   { name: 'Hypotecni Zona', url: 'https://hypotecnizona.csobhypotecni.cz/', parent: 'CSOB Hypotecni' },
+  { name: 'Moje CSOB Pojistovna', url: 'https://moje.csobpoj.cz/', parent: 'CSOB Pojistovna' },
 ];
 
 // Check if sites already exist
@@ -66,19 +68,19 @@ if (existing.length > 0) {
     }
   }
 
-  // Add new private zones if missing
-  const newZones = [
-    { name: 'CSOB Online', url: 'https://online.csob.cz/odhlaseni', parent: 'CSOB.cz' },
-    { name: 'CSOB CEB', url: 'https://ceb.csob.cz/web/public/odhlaseni', parent: 'CSOB.cz' },
+  // Add new sites if missing
+  const newSites = [
+    { name: 'CSOB Online', url: 'https://online.csob.cz/odhlaseni', site_type: 'private' },
+    { name: 'CSOB CEB', url: 'https://ceb.csob.cz/web/public/odhlaseni', site_type: 'private' },
+    { name: 'CSOB Pojistovna', url: 'https://www.csobpoj.cz/', site_type: 'public' },
+    { name: 'Moje CSOB Pojistovna', url: 'https://moje.csobpoj.cz/', site_type: 'private' },
   ];
+  const newZones = newSites;
 
   for (const zone of newZones) {
     if (!siteMap[zone.name]) {
-      const parent = siteMap[zone.parent];
-      if (parent) {
-        const id = createSite({ name: zone.name, url: zone.url, checks: defaultChecks, parent_id: parent.id, site_type: 'private' });
-        console.log(`  Created: ${zone.name} (ID: ${id}) -> ${zone.parent}`);
-      }
+      const id = createSite({ name: zone.name, url: zone.url, checks: defaultChecks, site_type: zone.site_type || 'public' });
+      console.log(`  Created: ${zone.name} (ID: ${id})`);
     } else {
       console.log(`  Already exists: ${zone.name}`);
     }
