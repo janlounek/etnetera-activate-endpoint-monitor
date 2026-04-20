@@ -76,7 +76,7 @@ function enableRunBtn() {
   if (btn) { btn.disabled = false; btn.textContent = 'Run All Checks'; }
 }
 
-// --- Dashboard (grouped, clean) ---
+// --- Dashboard (grouped by domain, clean) ---
 
 function renderSiteChecks(site) {
   return (site.checks || []).map(function(c) {
@@ -92,14 +92,16 @@ function getLastChecked(site) {
   return times.sort().pop();
 }
 
-function renderSiteRow(site, isChild) {
+function renderSiteRow(site) {
   var checks = renderSiteChecks(site);
   var lastChecked = getLastChecked(site);
-  var nameClass = isChild ? 'site-name-child' : 'site-name';
-  var prefix = isChild ? '<span class="child-indicator"></span>' : '';
-  var typeLabel = site.site_type === 'private' ? '<span class="type-badge private">Private</span>' : '';
+  var isPrivate = site.isPrivate;
+  var rowClass = isPrivate ? 'child-row' : 'site-row';
+  var nameClass = isPrivate ? 'site-name-child' : 'site-name';
+  var prefix = isPrivate ? '<span class="child-indicator"></span>' : '';
+  var typeLabel = isPrivate ? '<span class="type-badge private">Private zone</span>' : '';
 
-  return '<tr class="' + (isChild ? 'child-row' : 'parent-row') + '">' +
+  return '<tr class="' + rowClass + '">' +
     '<td class="' + nameClass + '">' + prefix + '<a href="/sites/' + site.id + '">' + escapeHtml(site.name) + '</a> ' + typeLabel + '</td>' +
     '<td><a href="' + escapeHtml(site.url) + '" target="_blank" class="site-url">' + escapeHtml(site.url) + '</a></td>' +
     '<td><div class="check-badges">' + (checks || '<span class="text-muted">No checks</span>') + '</div></td>' +
@@ -127,10 +129,12 @@ async function loadDashboard() {
     var html = '';
     for (var i = 0; i < groups.length; i++) {
       var group = groups[i];
-      html += renderSiteRow(group, false);
-      var children = group.children || [];
-      for (var j = 0; j < children.length; j++) {
-        html += renderSiteRow(children[j], true);
+      // Domain header row
+      html += '<tr class="domain-header-row"><td colspan="5" class="domain-header">' + escapeHtml(group.domain) + '</td></tr>';
+      // Site rows within this domain
+      var sites = group.sites || [];
+      for (var j = 0; j < sites.length; j++) {
+        html += renderSiteRow(sites[j]);
       }
     }
     tbody.innerHTML = html;

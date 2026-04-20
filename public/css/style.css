@@ -429,8 +429,22 @@ body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Grouped site rows */
-.parent-row td { font-weight: 500; }
+/* Domain-grouped site rows */
+.domain-header-row td {
+  background: var(--bg);
+  border-bottom: none;
+}
+
+.domain-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 14px 16px 6px !important;
+}
+
+.site-row td { font-weight: 500; }
 
 .child-row td {
   background: var(--bg-hover);
@@ -438,7 +452,7 @@ body {
 }
 
 .site-name-child {
-  padding-left: 28px !important;
+  padding-left: 32px !important;
 }
 
 .child-indicator {

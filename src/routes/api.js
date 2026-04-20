@@ -5,6 +5,44 @@ const { runAllChecks, runSingleSiteCheck, isRunning, CHECKER_LABELS } = require(
 const { sendTestMessage } = require('../slack');
 const scheduler = require('../scheduler');
 
+// --- Helpers ---
+
+function getRootDomain(urlStr) {
+  try {
+    const hostname = new URL(urlStr).hostname;
+    // Split by dots, take last 2 parts (handles .cz, .com, etc.)
+    const parts = hostname.split('.');
+    if (parts.length >= 2) {
+      return parts.slice(-2).join('.');
+    }
+    return hostname;
+  } catch (e) {
+    return urlStr;
+  }
+}
+
+function isPrivateZone(urlStr) {
+  try {
+    const hostname = new URL(urlStr).hostname;
+    const pathname = new URL(urlStr).pathname;
+    // Sites that are clearly private zones / login areas
+    const privatePatterns = [
+      /^identita\./,
+      /^online\./,
+      /^moje\./,
+      /^ceb\./,
+      /^hypotecnizona\./,
+      /odhlaseni/,
+      /login/,
+      /portal/,
+    ];
+    const full = hostname + pathname;
+    return privatePatterns.some(p => p.test(full));
+  } catch (e) {
+    return false;
+  }
+}
+
 // --- Sites ---
 
 router.get('/sites', (req, res) => {
@@ -16,15 +54,34 @@ router.get('/sites', (req, res) => {
     for (const r of results) {
       statusMap[r.check_type] = { status: r.status, details: r.details, checked_at: r.checked_at };
     }
-    return { ...site, latestResults: statusMap };
+    const isPrivate = site.site_type === 'private' || isPrivateZone(site.url);
+    return { ...site, latestResults: statusMap, isPrivate };
   }
 
   if (req.query.grouped === '1') {
-    const groups = db.getGroupedSites();
-    const grouped = groups.map(g => ({
-      ...attachResults(g),
-      children: (g.children || []).map(c => attachResults(c)),
-    }));
+    const sites = db.getAllSites().map(attachResults);
+
+    // Group by root domain
+    const domainGroups = {};
+    for (const site of sites) {
+      const root = getRootDomain(site.url);
+      if (!domainGroups[root]) domainGroups[root] = [];
+      domainGroups[root].push(site);
+    }
+
+    // Build grouped output: public sites first, then private zones
+    const grouped = Object.entries(domainGroups).map(([domain, members]) => {
+      // Sort: public (non-private) first, then private
+      members.sort((a, b) => (a.isPrivate ? 1 : 0) - (b.isPrivate ? 1 : 0));
+      return {
+        domain,
+        sites: members,
+      };
+    });
+
+    // Sort groups alphabetically by domain
+    grouped.sort((a, b) => a.domain.localeCompare(b.domain));
+
     return res.json(grouped);
   }
 
