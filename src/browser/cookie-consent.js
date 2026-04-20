@@ -1,6 +1,7 @@
 /**
  * Multi-layer cookie consent banner handler.
  * Attempts to accept cookie banners so marketing scripts can load.
+ * Supports Czech and English language consent banners.
  */
 
 // Layer 1: Framework-specific selectors (most reliable)
@@ -74,34 +75,37 @@ const CSS_PATTERNS = [
   '#acceptCookies',
 ];
 
-// Layer 3: Text patterns for button matching
+// Layer 3: Text patterns for button matching (English + Czech)
 const ACCEPT_TEXT_PATTERNS = [
-  /^accept\s*all$/i,
-  /^accept\s*all\s*cookies$/i,
-  /^accept\s*cookies$/i,
-  /^accept$/i,
+  // English
+  /^accept\s*(all)?\s*(cookies)?$/i,
   /^i\s*agree$/i,
   /^agree$/i,
-  /^allow\s*all$/i,
-  /^allow\s*all\s*cookies$/i,
-  /^allow\s*cookies$/i,
-  /^allow$/i,
+  /^allow\s*(all)?\s*(cookies)?$/i,
   /^got\s*it$/i,
   /^ok$/i,
   /^okay$/i,
   /^yes,?\s*i\s*agree$/i,
   /^i\s*accept$/i,
   /^consent$/i,
-  /^continue$/i,
+  // Czech
+  /^souhlas[ií]m$/i,
+  /^přijmout\s*(vše|všechny|cookies)?$/i,
+  /^přijm/i,
+  /^povolit\s*(vše|všechny|cookies)?$/i,
+  /^souhlasit$/i,
+  /^akceptovat$/i,
+  /^rozumím$/i,
+  /^přijímám$/i,
 ];
 
-// Context keywords that indicate a cookie/consent container
+// Context keywords that indicate a cookie/consent container (English + Czech)
 const CONSENT_CONTEXT_KEYWORDS = [
   'cookie', 'consent', 'privacy', 'gdpr', 'tracking', 'data protection',
+  'souhlas', 'soukromí', 'osobní údaje', 'ochrana',
 ];
 
 async function handleCookieConsent(page) {
-  // Try each strategy in order of reliability
   const strategies = [
     tryFrameworkSelectors,
     tryCssPatterns,
@@ -113,12 +117,13 @@ async function handleCookieConsent(page) {
     try {
       const clicked = await strategy(page);
       if (clicked) {
-        // Wait for scripts to fire after consent
+        // Wait for consent to propagate and scripts to start loading
         await page.waitForTimeout(2000);
         return { handled: true, strategy: strategy.name };
       }
     } catch (e) {
-      // Continue to next strategy
+      // Log but continue to next strategy
+      console.log(`  Cookie consent strategy ${strategy.name} error: ${e.message}`);
     }
   }
 
@@ -129,12 +134,34 @@ async function tryFrameworkSelectors(page) {
   for (const selector of FRAMEWORK_SELECTORS) {
     try {
       const el = await page.$(selector);
-      if (el && await el.isVisible()) {
-        await el.click();
+      if (!el) continue;
+
+      // Try multiple visibility checks — some banners use opacity or transform animations
+      let visible = false;
+      try {
+        visible = await el.isVisible();
+      } catch (e) {}
+
+      // Fallback: check via evaluate if isVisible fails
+      if (!visible) {
+        try {
+          visible = await el.evaluate(node => {
+            const rect = node.getBoundingClientRect();
+            const style = window.getComputedStyle(node);
+            return rect.width > 0 && rect.height > 0 &&
+                   style.display !== 'none' && style.visibility !== 'hidden' &&
+                   parseFloat(style.opacity) > 0;
+          });
+        } catch (e) {}
+      }
+
+      if (visible) {
+        await el.click({ force: true });
+        console.log(`  Cookie consent: clicked ${selector}`);
         return true;
       }
     } catch (e) {
-      // selector not found, continue
+      // selector not found or click failed, continue
     }
   }
   return false;
@@ -144,8 +171,11 @@ async function tryCssPatterns(page) {
   for (const selector of CSS_PATTERNS) {
     try {
       const el = await page.$(selector);
-      if (el && await el.isVisible()) {
-        await el.click();
+      if (!el) continue;
+      const visible = await el.isVisible().catch(() => false);
+      if (visible) {
+        await el.click({ force: true });
+        console.log(`  Cookie consent: clicked CSS pattern ${selector}`);
         return true;
       }
     } catch (e) {
@@ -156,22 +186,21 @@ async function tryCssPatterns(page) {
 }
 
 async function tryTextMatching(page) {
-  // Find all visible buttons and links
   const candidates = await page.$$('button, a[role="button"], a[href="#"], input[type="button"], input[type="submit"]');
 
   for (const candidate of candidates) {
     try {
-      if (!await candidate.isVisible()) continue;
+      const visible = await candidate.isVisible().catch(() => false);
+      if (!visible) continue;
 
       const text = (await candidate.textContent() || '').trim();
-      if (!text) continue;
+      if (!text || text.length > 50) continue;
 
       const matchesAcceptPattern = ACCEPT_TEXT_PATTERNS.some(pattern => pattern.test(text));
       if (!matchesAcceptPattern) continue;
 
       // Check if this button is in a consent context
       const isInConsentContext = await candidate.evaluate((el, keywords) => {
-        // Walk up the DOM tree looking for consent-related text
         let parent = el.parentElement;
         let depth = 0;
         while (parent && depth < 10) {
@@ -184,7 +213,8 @@ async function tryTextMatching(page) {
       }, CONSENT_CONTEXT_KEYWORDS);
 
       if (isInConsentContext) {
-        await candidate.click();
+        await candidate.click({ force: true });
+        console.log(`  Cookie consent: clicked text match "${text}"`);
         return true;
       }
     } catch (e) {
@@ -208,12 +238,12 @@ async function tryIframeConsent(page) {
 
     if (!isConsentFrame) continue;
 
-    // Try framework selectors within the iframe
     for (const selector of FRAMEWORK_SELECTORS) {
       try {
         const el = await frame.$(selector);
-        if (el && await el.isVisible()) {
-          await el.click();
+        if (el && await el.isVisible().catch(() => false)) {
+          await el.click({ force: true });
+          console.log(`  Cookie consent: clicked ${selector} in iframe`);
           return true;
         }
       } catch (e) {
@@ -221,14 +251,15 @@ async function tryIframeConsent(page) {
       }
     }
 
-    // Try text matching within the iframe
     const candidates = await frame.$$('button, a[role="button"]');
     for (const candidate of candidates) {
       try {
-        if (!await candidate.isVisible()) continue;
+        const visible = await candidate.isVisible().catch(() => false);
+        if (!visible) continue;
         const text = (await candidate.textContent() || '').trim();
         if (ACCEPT_TEXT_PATTERNS.some(p => p.test(text))) {
-          await candidate.click();
+          await candidate.click({ force: true });
+          console.log(`  Cookie consent: clicked text match "${text}" in iframe`);
           return true;
         }
       } catch (e) {

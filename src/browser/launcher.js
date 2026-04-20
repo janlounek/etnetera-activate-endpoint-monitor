@@ -44,8 +44,25 @@ async function checkSite(site, checksConfig, checkerModules) {
       timeout: 30000,
     });
 
-    // Wait for cookie banner to appear
-    await page.waitForTimeout(2000);
+    // Wait for page to be more fully loaded before looking for consent banner
+    try {
+      await page.waitForLoadState('load', { timeout: 10000 });
+    } catch (e) {
+      // load timeout is fine, continue
+    }
+
+    // Smart wait: try to wait for a known consent element to appear (up to 8s)
+    try {
+      await page.waitForSelector(
+        '#onetrust-consent-sdk, #onetrust-banner-sdk, #onetrust-accept-btn-handler, ' +
+        '#CybotCookiebotDialog, .osano-cm-dialog, #didomi-notice, ' +
+        '[class*="cookie-banner"], [class*="consent-banner"], [id*="cookie-banner"]',
+        { timeout: 8000, state: 'visible' }
+      );
+    } catch (e) {
+      // No known banner appeared — that's ok, try anyway after a fallback wait
+      await page.waitForTimeout(3000);
+    }
 
     // Handle cookie consent
     const consentResult = await handleCookieConsent(page);
@@ -57,8 +74,8 @@ async function checkSite(site, checksConfig, checkerModules) {
       // networkidle timeout is acceptable — some sites never fully settle
     }
 
-    // Additional wait for late-loading scripts
-    await page.waitForTimeout(3000);
+    // Additional wait for late-loading scripts (post-consent scripts can be slow)
+    await page.waitForTimeout(5000);
 
     // Run each configured checker
     for (const check of checksConfig) {
