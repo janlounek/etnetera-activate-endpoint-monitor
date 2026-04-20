@@ -1,0 +1,45 @@
+<%- include('header') %>
+
+<div class="dashboard">
+  <div class="summary-bar" id="summary-bar">
+    <div class="summary-card">
+      <span class="summary-number" id="total-sites">-</span>
+      <span class="summary-label">Total Sites</span>
+    </div>
+    <div class="summary-card summary-pass">
+      <span class="summary-number" id="passing-sites">-</span>
+      <span class="summary-label">Passing</span>
+    </div>
+    <div class="summary-card summary-fail">
+      <span class="summary-number" id="failing-sites">-</span>
+      <span class="summary-label">Failing</span>
+    </div>
+    <div class="summary-card">
+      <button class="btn btn-primary" id="run-all-btn" onclick="runAllChecks()">Run All Checks</button>
+    </div>
+  </div>
+
+  <div class="sites-table-wrapper">
+    <table class="sites-table" id="sites-table">
+      <thead>
+        <tr>
+          <th>Site</th>
+          <th>URL</th>
+          <th>Endpoints</th>
+          <th>Last Checked</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="sites-tbody">
+        <tr><td colspan="5" class="loading">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  var CHECKER_LABELS = <%- JSON.stringify(checkerLabels) %>;
+  loadDashboard();
+</script>
+
+<%- include('footer') %>

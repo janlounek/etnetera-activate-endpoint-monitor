@@ -1,0 +1,92 @@
+<%- include('header') %>
+
+<%
+  var isEdit = !!site;
+  var siteName = site ? site.name : '';
+  var siteUrl = site ? site.url : '';
+  var siteId = site ? site.id : null;
+
+  function isChecked(type) {
+    if (!site) return false;
+    return site.checks.some(function(c) { return c.checker_type === type; });
+  }
+
+  function getConfigVal(type, key) {
+    if (!site) return '';
+    var check = site.checks.find(function(c) { return c.checker_type === type; });
+    if (!check) return '';
+    try {
+      var cfg = typeof check.config === 'string' ? JSON.parse(check.config) : (check.config || {});
+      return cfg[key] || '';
+    } catch(e) { return ''; }
+  }
+%>
+
+<div class="form-page">
+  <h1><%= isEdit ? 'Edit Site' : 'Add New Site' %></h1>
+  <form id="site-form" onsubmit="saveSite(event)">
+    <div class="form-group">
+      <label for="name">Site Name</label>
+      <input type="text" id="name" name="name" required placeholder="e.g. My Website" value="<%= siteName %>">
+    </div>
+    <div class="form-group">
+      <label for="url">URL</label>
+      <input type="url" id="url" name="url" required placeholder="https://example.com" value="<%= siteUrl %>">
+    </div>
+    <div class="form-group">
+      <label>Checks to Run</label>
+      <div class="checks-grid">
+        <% Object.entries(checkerLabels).forEach(function([type, label]) { %>
+          <div class="check-option">
+            <label class="checkbox-label">
+              <input type="checkbox" name="checks" value="<%= type %>" <%= isChecked(type) ? 'checked' : '' %> onchange="toggleConfig(this, '<%= type %>')">
+              <span><%= label %></span>
+            </label>
+            <div class="config-fields" id="config-<%= type %>" style="display:<%= isChecked(type) ? 'block' : 'none' %>">
+              <% if (type === 'google_analytics') { %>
+                <input type="text" name="config_<%= type %>_measurementId" placeholder="Measurement ID (optional, e.g. G-XXXXX)" value="<%= getConfigVal(type, 'measurementId') %>">
+              <% } else if (type === 'google_tag_manager') { %>
+                <input type="text" name="config_<%= type %>_containerId" placeholder="Container ID (optional, e.g. GTM-XXXXX)" value="<%= getConfigVal(type, 'containerId') %>">
+              <% } else if (type === 'meta_pixel') { %>
+                <input type="text" name="config_<%= type %>_pixelId" placeholder="Pixel ID (optional)" value="<%= getConfigVal(type, 'pixelId') %>">
+              <% } else if (type === 'tiktok_pixel') { %>
+                <input type="text" name="config_<%= type %>_pixelId" placeholder="Pixel ID (optional)" value="<%= getConfigVal(type, 'pixelId') %>">
+              <% } else if (type === 'segment') { %>
+                <input type="text" name="config_<%= type %>_writeKey" placeholder="Write Key (optional)" value="<%= getConfigVal(type, 'writeKey') %>">
+              <% } else if (type === 'google_ads') { %>
+                <small class="help-text">Checks: googleads.g.doubleclick.net, google.com, google.cz</small>
+              <% } else if (type === 'adform') { %>
+                <small class="help-text">Checks: s2.adform.net, track.adform.net</small>
+              <% } else if (type === 'adobe_analytics') { %>
+                <input type="text" name="config_<%= type %>_trackingDomain" placeholder="Tracking domain (default: tracking-secure.csob.cz)" value="<%= getConfigVal(type, 'trackingDomain') %>">
+              <% } else if (type === 'adobe_launch') { %>
+                <input type="text" name="config_<%= type %>_customDomain" placeholder="Custom domain (default: statistics.csob.cz)" value="<%= getConfigVal(type, 'customDomain') %>">
+              <% } else if (type === 'onetrust') { %>
+                <small class="help-text">Checks: cdn.cookielaw.org</small>
+              <% } else if (type === 'sklik') { %>
+                <small class="help-text">Checks: c.seznam.cz, h.seznam.cz</small>
+              <% } else if (type === 'exponea') { %>
+                <input type="text" name="config_<%= type %>_apiDomain" placeholder="API domain (default: data-api.csob.cz)" value="<%= getConfigVal(type, 'apiDomain') %>">
+              <% } else if (type === 'custom') { %>
+                <input type="text" name="config_<%= type %>_scriptUrl" placeholder="Script URL to check" value="<%= getConfigVal(type, 'scriptUrl') %>">
+                <input type="text" name="config_<%= type %>_globalVar" placeholder="Global variable to check (e.g. myLib)" value="<%= getConfigVal(type, 'globalVar') %>">
+                <input type="text" name="config_<%= type %>_name" placeholder="Check name (e.g. HubSpot)" value="<%= getConfigVal(type, 'name') %>">
+              <% } %>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><%= isEdit ? 'Update' : 'Create' %> Site</button>
+      <a href="<%= isEdit ? '/sites/' + siteId : '/' %>" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  var EDIT_MODE = <%= isEdit ? 'true' : 'false' %>;
+  var SITE_ID = <%= siteId ? siteId : 'null' %>;
+</script>
+
+<%- include('footer') %>

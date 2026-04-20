@@ -1,0 +1,44 @@
+<%- include('header') %>
+
+<div class="site-detail">
+  <div class="site-header">
+    <div>
+      <h1><%= site.name %></h1>
+      <a href="<%= site.url %>" target="_blank" class="site-url"><%= site.url %></a>
+    </div>
+    <div class="site-actions">
+      <button class="btn btn-primary" onclick="runSiteCheck(<%= site.id %>)">Check Now</button>
+      <a href="/sites/<%= site.id %>/edit" class="btn btn-secondary">Edit</a>
+      <button class="btn btn-danger" onclick="deleteSite(<%= site.id %>)">Delete</button>
+    </div>
+  </div>
+
+  <h2>Current Status</h2>
+  <div class="status-cards" id="status-cards">
+    <p class="loading">Loading...</p>
+  </div>
+
+  <h2>Check History</h2>
+  <table class="results-table" id="results-table">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Check</th>
+        <th>Status</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody id="results-tbody">
+      <tr><td colspan="4" class="loading">Loading...</td></tr>
+    </tbody>
+  </table>
+  <button class="btn btn-secondary" id="load-more-btn" onclick="loadMoreResults()" style="display:none">Load More</button>
+</div>
+
+<script>
+  var SITE_ID = <%= site.id %>;
+  var CHECKER_LABELS = <%- JSON.stringify(checkerLabels) %>;
+  loadSiteDetail(SITE_ID);
+</script>
+
+<%- include('footer') %>
