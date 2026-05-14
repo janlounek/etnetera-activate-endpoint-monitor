@@ -31,8 +31,15 @@ function getDb() {
     if (orphanCount > 0) {
       let csob = db.prepare("SELECT id FROM clients WHERE slug = 'csob'").get();
       if (!csob) {
-        const oldWebhook = db.prepare("SELECT value FROM settings WHERE key = 'slack_webhook_url'").get();
-        const webhook = oldWebhook ? oldWebhook.value : null;
+        // Best-effort read of the legacy global Slack webhook so it isn't lost on migration.
+        // Wrapped in try/catch — a malformed `settings` row mustn't block startup.
+        let webhook = null;
+        try {
+          const oldWebhook = db.prepare("SELECT value FROM settings WHERE key = 'slack_webhook_url'").get();
+          webhook = oldWebhook ? oldWebhook.value : null;
+        } catch (e) {
+          console.warn(`Migration: could not read legacy slack_webhook_url (${e.message}); proceeding without it.`);
+        }
         const r = db.prepare("INSERT INTO clients (name, slug, slack_webhook_url) VALUES (?, ?, ?)").run('CSOB', 'csob', webhook);
         csob = { id: r.lastInsertRowid };
         console.log(`Migration: created default 'CSOB' client (id=${csob.id})`);
