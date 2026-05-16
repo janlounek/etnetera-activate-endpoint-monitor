@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS clients (
   name TEXT NOT NULL,
   slug TEXT NOT NULL UNIQUE,
   slack_webhook_url TEXT,
+  notification_emails TEXT,
   username TEXT,
   password_hash TEXT,
   created_at TEXT DEFAULT (datetime('now')),

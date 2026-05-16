@@ -6,6 +6,7 @@
   var name = client ? client.name : '';
   var slug = client ? client.slug : '';
   var webhook = client ? (client.slack_webhook_url || '') : '';
+  var emails = client ? (client.notification_emails || '') : '';
   var username = client ? (client.username || '') : '';
   var hasPassword = !!(client && client.password_hash);
   var _ctxForForm = (typeof authContext !== 'undefined') ? authContext : 'admin';
@@ -28,6 +29,11 @@
       <label for="slack_webhook_url">Slack webhook URL</label>
       <input type="url" id="slack_webhook_url" name="slack_webhook_url" placeholder="https://hooks.slack.com/services/..." value="<%= webhook %>">
       <small class="help-text">Failure notifications for this client's sites go here. Leave blank to disable Slack alerts.</small>
+    </div>
+    <div class="form-group">
+      <label for="notification_emails">Notification email addresses</label>
+      <input type="text" id="notification_emails" name="notification_emails" placeholder="alice@example.com, bob@example.com" value="<%= emails %>">
+      <small class="help-text">Comma- or space-separated list. Sent on failures alongside Slack. Requires SMTP env vars on the server.</small>
     </div>
 
     <% if (!_isClient) { %>

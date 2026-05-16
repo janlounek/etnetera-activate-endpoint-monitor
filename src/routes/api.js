@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../../db/database');
 const { runAllChecks, runSingleSiteCheck, isRunning, CHECKER_LABELS } = require('../checkers');
 const { sendTestMessage } = require('../slack');
+const { sendTestMessage: sendTestEmail, isEnabled: emailEnabled } = require('../email');
 const scheduler = require('../scheduler');
 
 // --- Helpers ---
@@ -77,13 +78,18 @@ function clientSummary(client, allLatest) {
     else failing.add(r.site_id);
   }
 
-  // Never include password_hash in any response.
-  const { password_hash, ...safe } = client;
+  // Never include password_hash or raw email list in list responses.
+  const { password_hash, notification_emails, ...safe } = client;
+  const recipientCount = notification_emails
+    ? notification_emails.split(/[,;\s]+/).map(s => s.trim()).filter(s => s.includes('@')).length
+    : 0;
   return {
     ...safe,
     has_webhook: !!client.slack_webhook_url,
     has_password: !!client.password_hash,
-    slack_webhook_url: undefined,  // don't leak the webhook in lists
+    has_email_recipients: recipientCount > 0,
+    email_recipient_count: recipientCount,
+    slack_webhook_url: undefined,
     sites_total: sites.length,
     sites_passing: [...passing].filter(id => !failing.has(id)).length,
     sites_failing: failing.size,
@@ -106,7 +112,7 @@ router.get('/clients', (req, res) => {
 
 router.post('/clients', (req, res) => {
   if (!requireAdmin(req, res)) return;
-  const { name, slug, slack_webhook_url, username, password } = req.body;
+  const { name, slug, slack_webhook_url, notification_emails, username, password } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const finalSlug = (slug && slugify(slug)) || slugify(name);
@@ -124,6 +130,7 @@ router.post('/clients', (req, res) => {
       name,
       slug: finalSlug,
       slack_webhook_url: slack_webhook_url || null,
+      notification_emails: notification_emails || null,
       username: username || null,
       password: password || null,
     });
@@ -137,7 +144,12 @@ router.get('/clients/:slug', (req, res) => {
   const client = db.getClientBySlug(req.params.slug);
   if (!client) return res.status(404).json({ error: 'Client not found' });
   const allLatest = db.getLatestResultsForAllSites();
-  res.json({ ...clientSummary(client, allLatest), slack_webhook_url: client.slack_webhook_url || '' });
+  res.json({
+    ...clientSummary(client, allLatest),
+    slack_webhook_url: client.slack_webhook_url || '',
+    notification_emails: client.notification_emails || '',
+    smtp_configured: emailEnabled(),
+  });
 });
 
 router.put('/clients/:slug', (req, res) => {
@@ -145,8 +157,9 @@ router.put('/clients/:slug', (req, res) => {
   if (!client) return res.status(404).json({ error: 'Client not found' });
 
   const update = {};
-  // Slack webhook may be updated by admin OR by the client themselves.
+  // Slack webhook + notification emails may be updated by admin OR by the client themselves.
   if (req.body.slack_webhook_url !== undefined) update.slack_webhook_url = req.body.slack_webhook_url;
+  if (req.body.notification_emails !== undefined) update.notification_emails = req.body.notification_emails;
 
   // Identity / credential / slug changes — admin only.
   const adminOnlyChange = (req.body.name !== undefined) || (req.body.slug !== undefined)
@@ -198,6 +211,17 @@ router.post('/clients/:slug/test-slack', async (req, res) => {
   try {
     await sendTestMessage(client.slack_webhook_url, client.name);
     res.json({ message: 'Test message sent' });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/clients/:slug/test-email', async (req, res) => {
+  const client = db.getClientBySlug(req.params.slug);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  try {
+    const info = await sendTestEmail(client.notification_emails, client.name);
+    res.json({ message: `Test email sent to ${info.recipients.length} recipient(s)`, recipients: info.recipients });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

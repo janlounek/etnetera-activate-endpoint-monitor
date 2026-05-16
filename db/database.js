@@ -62,6 +62,9 @@ function getDb() {
     if (!clientCols.includes('password_hash')) {
       db.exec('ALTER TABLE clients ADD COLUMN password_hash TEXT');
     }
+    if (!clientCols.includes('notification_emails')) {
+      db.exec('ALTER TABLE clients ADD COLUMN notification_emails TEXT');
+    }
 
     // Backfill: if there are sites without a client_id, create a default CSOB client
     // and move them under it (preserves existing production data).
@@ -117,21 +120,22 @@ function getClientByUsername(username) {
   return getDb().prepare('SELECT * FROM clients WHERE username = ?').get(String(username));
 }
 
-function createClient({ name, slug, slack_webhook_url = null, username = null, password = null }) {
+function createClient({ name, slug, slack_webhook_url = null, notification_emails = null, username = null, password = null }) {
   const password_hash = password ? hashPassword(password) : null;
   const r = getDb().prepare(
-    'INSERT INTO clients (name, slug, slack_webhook_url, username, password_hash) VALUES (?, ?, ?, ?, ?)'
-  ).run(name, slug, slack_webhook_url, username || null, password_hash);
+    'INSERT INTO clients (name, slug, slack_webhook_url, notification_emails, username, password_hash) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(name, slug, slack_webhook_url, notification_emails || null, username || null, password_hash);
   return r.lastInsertRowid;
 }
 
-function updateClient(id, { name, slug, slack_webhook_url, username, password, clearPassword }) {
+function updateClient(id, { name, slug, slack_webhook_url, notification_emails, username, password, clearPassword }) {
   const d = getDb();
   const fields = [];
   const values = [];
   if (name !== undefined) { fields.push('name = ?'); values.push(name); }
   if (slug !== undefined) { fields.push('slug = ?'); values.push(slug); }
   if (slack_webhook_url !== undefined) { fields.push('slack_webhook_url = ?'); values.push(slack_webhook_url || null); }
+  if (notification_emails !== undefined) { fields.push('notification_emails = ?'); values.push(notification_emails || null); }
   if (username !== undefined) { fields.push('username = ?'); values.push(username || null); }
   if (clearPassword) {
     fields.push('password_hash = ?'); values.push(null);

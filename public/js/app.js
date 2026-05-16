@@ -144,6 +144,8 @@ async function saveClient(event) {
   var body = {
     slack_webhook_url: form.querySelector('#slack_webhook_url').value,
   };
+  var emailsEl = form.querySelector('#notification_emails');
+  if (emailsEl) body.notification_emails = emailsEl.value;
   // Admin-only fields are absent (or disabled) when a client edits themselves.
   // Only include fields that have an editable input on the page.
   var nameEl = form.querySelector('#name');
@@ -188,8 +190,17 @@ async function deleteClient(slug) {
 async function loadClientSettings() {
   try {
     var c = await api('/clients/' + CLIENT_SLUG);
-    var input = document.getElementById('slack_webhook_url');
-    if (input) input.value = c.slack_webhook_url || '';
+    var slackInput = document.getElementById('slack_webhook_url');
+    if (slackInput) slackInput.value = c.slack_webhook_url || '';
+    var emailsInput = document.getElementById('notification_emails');
+    if (emailsInput) emailsInput.value = c.notification_emails || '';
+    var smtpStatus = document.getElementById('smtp-status');
+    if (smtpStatus) {
+      smtpStatus.textContent = c.smtp_configured
+        ? 'SMTP is configured.'
+        : 'SMTP is NOT configured — emails will be skipped until SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM env vars are set.';
+      smtpStatus.style.color = c.smtp_configured ? 'var(--success)' : 'var(--warning)';
+    }
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -199,7 +210,10 @@ async function saveClientSettings(event) {
   event.preventDefault();
   try {
     var slack_webhook_url = document.getElementById('slack_webhook_url').value;
-    await api('/clients/' + CLIENT_SLUG, { method: 'PUT', body: JSON.stringify({ slack_webhook_url: slack_webhook_url }) });
+    var emailsEl = document.getElementById('notification_emails');
+    var body = { slack_webhook_url: slack_webhook_url };
+    if (emailsEl) body.notification_emails = emailsEl.value;
+    await api('/clients/' + CLIENT_SLUG, { method: 'PUT', body: JSON.stringify(body) });
     toast('Saved');
   } catch (e) {
     toast(e.message, 'error');
@@ -212,6 +226,24 @@ async function testClientSlack() {
   try {
     await api('/clients/' + CLIENT_SLUG + '/test-slack', { method: 'POST' });
     resultEl.textContent = 'Sent!';
+    resultEl.style.color = 'var(--success)';
+  } catch (e) {
+    resultEl.textContent = e.message;
+    resultEl.style.color = 'var(--danger)';
+  }
+}
+
+async function testClientEmail() {
+  var resultEl = document.getElementById('email-test-result');
+  resultEl.textContent = 'Sending...';
+  // Make sure the in-form email value is persisted first, so the test uses whatever the user just typed.
+  try {
+    var emailsEl = document.getElementById('notification_emails');
+    if (emailsEl) {
+      await api('/clients/' + CLIENT_SLUG, { method: 'PUT', body: JSON.stringify({ notification_emails: emailsEl.value }) });
+    }
+    var resp = await api('/clients/' + CLIENT_SLUG + '/test-email', { method: 'POST' });
+    resultEl.textContent = resp.message || 'Sent!';
     resultEl.style.color = 'var(--success)';
   } catch (e) {
     resultEl.textContent = e.message;

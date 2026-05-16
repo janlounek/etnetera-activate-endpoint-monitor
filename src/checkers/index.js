@@ -1,6 +1,7 @@
 const { checkSite, launchBrowser, closeBrowser } = require('../browser/launcher');
 const { saveResult, getAllSites, getSiteById, getClientById } = require('../../db/database');
 const { sendNotification } = require('../slack');
+const { sendNotification: sendEmailNotification } = require('../email');
 
 const CHECKERS = {
   google_analytics: require('./google-analytics'),
@@ -107,12 +108,13 @@ async function notifyFailuresByClient(failures) {
 
   for (const [clientIdStr, clientFailures] of Object.entries(byClient)) {
     if (clientIdStr === 'none') {
-      console.log(`  Skipping Slack: ${clientFailures.length} failure(s) belong to sites without a client.`);
+      console.log(`  Skipping notifications: ${clientFailures.length} failure(s) belong to sites without a client.`);
       continue;
     }
     const client = getClientById(parseInt(clientIdStr));
     if (!client) continue;
     await sendNotification(clientFailures, client.slack_webhook_url, client.name);
+    await sendEmailNotification(clientFailures, client.notification_emails, client.name);
   }
 }
 

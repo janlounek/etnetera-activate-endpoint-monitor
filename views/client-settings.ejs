@@ -2,7 +2,7 @@
 <%- include('header') %>
 
 <div class="settings-page">
-  <h1><%= client.name %> — Slack notifications</h1>
+  <h1><%= client.name %> — Notifications</h1>
 
   <form id="client-settings-form" onsubmit="saveClientSettings(event)">
     <div class="form-group">
@@ -10,7 +10,15 @@
       <input type="url" id="slack_webhook_url" name="slack_webhook_url" placeholder="https://hooks.slack.com/services/...">
       <button type="button" class="btn btn-secondary btn-sm" onclick="testClientSlack()">Send test message</button>
       <span id="slack-test-result"></span>
-      <small class="help-text">Failure notifications for <strong><%= client.name %></strong>'s sites are sent here.</small>
+      <small class="help-text">Failure notifications for <strong><%= client.name %></strong>'s sites are also posted here. Leave blank to disable.</small>
+    </div>
+
+    <div class="form-group">
+      <label for="notification_emails">Notification email addresses</label>
+      <input type="text" id="notification_emails" name="notification_emails" placeholder="alice@example.com, bob@example.com">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="testClientEmail()">Send test email</button>
+      <span id="email-test-result"></span>
+      <small class="help-text">Comma- or space-separated list. Failure notifications go to each address. SMTP must be configured server-side — <span id="smtp-status" class="muted"></span></small>
     </div>
 
     <div class="form-actions">
