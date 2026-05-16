@@ -157,58 +157,50 @@ module.exports = async function checkAdobeAnalytics(page, interceptor, config) {
     findings.rsidMatch = foundSuites.includes(expectedRsid.toLowerCase());
   }
 
-  // --- Determine status ---
+  // --- Determine pass/fail ---
   var hasLegacy = findings.appMeasurementFound || findings.sObjectExists || findings.legacyRequests > 0;
   var hasEdge = findings.alloySdkFound || findings.alloyExists || findings.edgeRequests > 0;
   var hasCustom = findings.customDomainRequests > 0;
   var analyticsPresent = hasLegacy || hasEdge || hasCustom;
-  var hasAnyNetwork = findings.legacyRequests > 0 || findings.edgeRequests > 0 || findings.customDomainRequests > 0;
 
-  // RSID validation: only "fail" if we found a DIFFERENT rsid than expected.
-  // If rsid couldn't be extracted (common with Edge Network), that's a warn, not a fail.
-  var rsidMismatch = expectedRsid && findings.rsidFound && findings.rsidMatch === false;
-  var rsidUnverified = expectedRsid && !findings.rsidFound;
+  // RSID validation: only fail if we found a DIFFERENT rsid than expected.
+  // If rsid couldn't be extracted (common with Edge Network), don't fail.
+  var rsidOk = true;
+  if (expectedRsid && findings.rsidFound && findings.rsidMatch === false) {
+    rsidOk = false; // Found a different RSID — that's a real mismatch
+  }
 
-  if (!analyticsPresent) {
+  var pass = analyticsPresent && rsidOk;
+
+  // Build reasons
+  if (analyticsPresent) {
+    var parts = [];
+    if (findings.appMeasurementFound) parts.push('AppMeasurement script loaded');
+    if (findings.sObjectExists) parts.push('s object active');
+    if (findings.alloySdkFound) parts.push('Web SDK/alloy.js loaded');
+    if (findings.alloyExists) parts.push('alloy() active');
+    if (findings.legacyRequests > 0) parts.push(findings.legacyRequests + ' legacy collect request(s)');
+    if (findings.edgeRequests > 0) parts.push(findings.edgeRequests + ' Edge Network request(s)');
+    if (trackingDomain && findings.customDomainRequests > 0) parts.push(findings.customDomainRequests + ' request(s) to ' + trackingDomain);
+    if (findings.rsidFound) parts.push('RSID: ' + findings.rsidFound);
+    if (expectedRsid && !findings.rsidFound) parts.push('RSID not extractable from requests (Edge Network)');
+
+    if (!rsidOk) {
+      findings.reasons = [
+        'FAIL: Analytics is present but reporting suite mismatch',
+        'Expected RSID: ' + expectedRsid,
+        'Found RSID: ' + findings.rsidFound,
+        'OK (analytics): ' + parts.join(', '),
+      ];
+    } else {
+      findings.reasons = ['OK: ' + parts.join(', ')];
+    }
+  } else {
     findings.reasons.push('No AppMeasurement/s_code script found in DOM');
     findings.reasons.push('No Adobe Web SDK (alloy.js) found');
     findings.reasons.push('No alloy() or s object in window');
     findings.reasons.push('No requests to adobedc.net or omtrdc.net' + (trackingDomain ? ' or ' + trackingDomain : ''));
-    return { status: 'fail', details: findings };
   }
 
-  var okParts = [];
-  if (findings.appMeasurementFound) okParts.push('AppMeasurement script loaded');
-  if (findings.sObjectExists) okParts.push('s object active');
-  if (findings.alloySdkFound) okParts.push('Web SDK/alloy.js loaded');
-  if (findings.alloyExists) okParts.push('alloy() active');
-  if (findings.legacyRequests > 0) okParts.push(findings.legacyRequests + ' legacy collect request(s)');
-  if (findings.edgeRequests > 0) okParts.push(findings.edgeRequests + ' Edge Network request(s)');
-  if (trackingDomain && findings.customDomainRequests > 0) okParts.push(findings.customDomainRequests + ' request(s) to ' + trackingDomain);
-  if (findings.rsidFound) okParts.push('RSID: ' + findings.rsidFound);
-
-  if (rsidMismatch) {
-    findings.reasons = [
-      'FAIL: Analytics is present but reporting suite mismatch',
-      'Expected RSID: ' + expectedRsid,
-      'Found RSID: ' + findings.rsidFound,
-      'OK (analytics): ' + okParts.join(', '),
-    ];
-    return { status: 'fail', details: findings };
-  }
-
-  var concerns = [];
-  if (rsidUnverified) concerns.push('Expected RSID "' + expectedRsid + '" but could not be extracted from requests (Edge Network)');
-  if (!hasAnyNetwork) concerns.push('No network requests captured — script loaded but did not fire');
-  if (trackingDomain && findings.customDomainRequests === 0) concerns.push('No requests to ' + trackingDomain);
-
-  var okLine = 'OK: ' + okParts.join(', ');
-
-  if (concerns.length === 0) {
-    findings.reasons = [okLine];
-    return { status: 'pass', details: findings };
-  }
-
-  findings.reasons = [okLine, ...concerns];
-  return { status: 'warn', details: findings };
+  return { status: pass ? 'pass' : 'fail', details: findings };
 };

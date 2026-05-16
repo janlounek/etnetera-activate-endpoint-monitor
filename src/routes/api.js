@@ -68,32 +68,25 @@ function clientSummary(client, allLatest) {
   }
 
   const passing = new Set();
-  const warning = new Set();
   const failing = new Set();
   for (const r of allLatest) {
     if (!siteIds.has(r.site_id)) continue;
     const enabled = enabledChecks[r.site_id];
     if (!enabled || !enabled.has(r.check_type)) continue;
     if (r.status === 'pass') passing.add(r.site_id);
-    else if (r.status === 'warn') warning.add(r.site_id);
     else failing.add(r.site_id);
   }
 
-  // Site rolls up to its worst check: fail > warn > pass.
-  const sites_failing = failing.size;
-  const sites_warning = [...warning].filter(id => !failing.has(id)).length;
-  const sites_passing = [...passing].filter(id => !failing.has(id) && !warning.has(id)).length;
-
+  // Never include password_hash in any response.
   const { password_hash, ...safe } = client;
   return {
     ...safe,
     has_webhook: !!client.slack_webhook_url,
     has_password: !!client.password_hash,
-    slack_webhook_url: undefined,
+    slack_webhook_url: undefined,  // don't leak the webhook in lists
     sites_total: sites.length,
-    sites_passing,
-    sites_warning,
-    sites_failing,
+    sites_passing: [...passing].filter(id => !failing.has(id)).length,
+    sites_failing: failing.size,
   };
 }
 
@@ -264,7 +257,6 @@ router.get('/clients/:slug/status', (req, res) => {
     totalSites: summary.sites_total,
     enabledSites: sites.filter(s => s.enabled).length,
     passing: summary.sites_passing,
-    warning: summary.sites_warning,
     failing: summary.sites_failing,
     isRunning: isRunning(),
     checkerTypes: CHECKER_LABELS,
@@ -375,21 +367,18 @@ router.get('/status', (req, res) => {
   }
 
   const passing = new Set();
-  const warning = new Set();
   const failing = new Set();
   for (const r of latestResults) {
     const siteChecks = enabledChecks[r.site_id];
     if (!siteChecks || !siteChecks.has(r.check_type)) continue;
     if (r.status === 'pass') passing.add(r.site_id);
-    else if (r.status === 'warn') warning.add(r.site_id);
     else failing.add(r.site_id);
   }
 
   res.json({
     totalSites: sites.length,
     enabledSites: sites.filter(s => s.enabled).length,
-    passing: [...passing].filter(id => !failing.has(id) && !warning.has(id)).length,
-    warning: [...warning].filter(id => !failing.has(id)).length,
+    passing: [...passing].filter(id => !failing.has(id)).length,
     failing: failing.size,
     isRunning: isRunning(),
     checkerTypes: CHECKER_LABELS,

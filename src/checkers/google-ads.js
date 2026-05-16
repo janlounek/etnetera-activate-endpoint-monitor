@@ -1,12 +1,8 @@
 /**
  * Google Ads checker
  * Detects: Google Ads scripts, conversion tracking, remarketing tags, DoubleClick
- * Endpoints: googleads.g.doubleclick.net, googleadservices.com, googlesyndication.com, etc.
- *
- * Status:
- *   pass — ad script in DOM AND (gtag/AW config OR conversion cookie) AND network requests
- *   warn — partial: at least one matched but not all
- *   fail — nothing matched
+ * Endpoints: googleads.g.doubleclick.net, google.com, google.cz, googleadservices.com,
+ *            pagead2.googlesyndication.com, google conversion linker
  */
 module.exports = async function checkGoogleAds(page, interceptor, config) {
   const findings = {
@@ -17,6 +13,7 @@ module.exports = async function checkGoogleAds(page, interceptor, config) {
     reasons: [],
   };
 
+  // DOM check — Google Ads related scripts
   findings.scriptFound = await page.evaluate(() => {
     var scripts = document.querySelectorAll('script[src]');
     for (var i = 0; i < scripts.length; i++) {
@@ -32,13 +29,16 @@ module.exports = async function checkGoogleAds(page, interceptor, config) {
     return false;
   }).catch(() => false);
 
+  // Check for Google Ads conversion config in gtag/dataLayer
   findings.gtagWithAds = await page.evaluate(() => {
+    // Check if gtag is configured with an AW- (Google Ads) ID
     if (typeof window.google_tag_data === 'object') return true;
     if (typeof window.google_trackConversion === 'function') return true;
     if (Array.isArray(window.dataLayer)) {
       var str = JSON.stringify(window.dataLayer);
       if (str.includes('AW-') || str.includes('ads') || str.includes('conversion')) return true;
     }
+    // Check gtag config calls
     if (typeof window.gtag === 'function') {
       var scripts = document.querySelectorAll('script');
       for (var i = 0; i < scripts.length; i++) {
@@ -49,10 +49,12 @@ module.exports = async function checkGoogleAds(page, interceptor, config) {
     return false;
   }).catch(() => false);
 
+  // Check for conversion linker cookie
   findings.conversionLinker = await page.evaluate(() => {
     return document.cookie.includes('_gcl_') || document.cookie.includes('_gac_');
   }).catch(() => false);
 
+  // Network checks — broad matching for any Google Ads related traffic
   var patterns = [
     { name: 'doubleclick.net', regex: /doubleclick\.net/ },
     { name: 'googleadservices.com', regex: /googleadservices\.com/ },
@@ -75,36 +77,21 @@ module.exports = async function checkGoogleAds(page, interceptor, config) {
     }
   }
 
-  var configOk = findings.gtagWithAds || findings.conversionLinker;
-  var networkOk = totalNetworkHits > 0;
-  var anyFound = findings.scriptFound || configOk || networkOk;
-  var allFound = findings.scriptFound && configOk && networkOk;
+  var anyFound = findings.scriptFound || findings.gtagWithAds || findings.conversionLinker || totalNetworkHits > 0;
 
-  if (!anyFound) {
+  if (anyFound) {
+    var parts = [];
+    if (findings.scriptFound) parts.push('Ad script in DOM');
+    if (findings.gtagWithAds) parts.push('Ads config in gtag/dataLayer');
+    if (findings.conversionLinker) parts.push('Conversion linker cookie present');
+    if (findings.networkMatches.length > 0) parts.push(findings.networkMatches.join(', '));
+    findings.reasons = ['OK: ' + parts.join(', ')];
+  } else {
     findings.reasons.push('No Google Ads script tags found in DOM');
     findings.reasons.push('No AW- conversion ID in gtag/dataLayer config');
     findings.reasons.push('No conversion linker cookies (_gcl_, _gac_)');
     findings.reasons.push('No network requests to doubleclick.net, googleadservices.com, or googlesyndication.com');
-    return { status: 'fail', details: findings };
   }
 
-  var concerns = [];
-  if (!findings.scriptFound) concerns.push('No Google Ads script tags found in DOM');
-  if (!configOk) concerns.push('No AW- conversion ID and no conversion linker cookies');
-  if (!networkOk) concerns.push('No network requests to known Google Ads endpoints');
-
-  var okParts = [];
-  if (findings.scriptFound) okParts.push('Ad script in DOM');
-  if (findings.gtagWithAds) okParts.push('Ads config in gtag/dataLayer');
-  if (findings.conversionLinker) okParts.push('Conversion linker cookie present');
-  if (findings.networkMatches.length > 0) okParts.push(findings.networkMatches.join(', '));
-  var okLine = 'OK: ' + okParts.join(', ');
-
-  if (allFound) {
-    findings.reasons = [okLine];
-    return { status: 'pass', details: findings };
-  }
-
-  findings.reasons = [okLine, ...concerns];
-  return { status: 'warn', details: findings };
+  return { status: anyFound ? 'pass' : 'fail', details: findings };
 };

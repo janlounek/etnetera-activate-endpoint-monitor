@@ -1,11 +1,6 @@
 /**
  * Sklik (Seznam) checker
  * Endpoints: c.seznam.cz, h.seznam.cz
- *
- * Status:
- *   pass  — script in DOM AND both endpoints have requests
- *   warn  — at least one of {script, c.seznam, h.seznam} matched but not all
- *   fail  — nothing matched
  */
 module.exports = async function checkSklik(page, interceptor, config) {
   const findings = {
@@ -45,29 +40,17 @@ module.exports = async function checkSklik(page, interceptor, config) {
   if (hRequests.length > 0) findings.networkRequests.push(`h.seznam.cz: ${hRequests.length} request(s)`);
 
   const anyFound = findings.scriptFound || findings.endpoints.cSeznam || findings.endpoints.hSeznam;
-  const allFound = findings.scriptFound && findings.endpoints.cSeznam && findings.endpoints.hSeznam;
 
-  const concerns = [];
-  if (!findings.scriptFound) concerns.push('No Sklik/Seznam script found in DOM');
-  if (!findings.endpoints.cSeznam) concerns.push('No requests to c.seznam.cz');
-  if (!findings.endpoints.hSeznam) concerns.push('No requests to h.seznam.cz');
+  if (!findings.scriptFound) findings.reasons.push('No Sklik/Seznam script found in DOM');
+  if (!findings.endpoints.cSeznam) findings.reasons.push('No requests to c.seznam.cz');
+  if (!findings.endpoints.hSeznam) findings.reasons.push('No requests to h.seznam.cz');
 
-  if (!anyFound) {
-    findings.reasons = concerns;
-    return { status: 'fail', details: findings };
+  if (anyFound) {
+    const parts = [];
+    if (findings.scriptFound) parts.push('Sklik script in DOM');
+    if (findings.networkRequests.length > 0) parts.push(findings.networkRequests.join(', '));
+    findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  const okParts = [];
-  if (findings.scriptFound) okParts.push('Sklik script in DOM');
-  if (findings.networkRequests.length > 0) okParts.push(findings.networkRequests.join(', '));
-  const okLine = 'OK: ' + okParts.join(', ');
-
-  if (allFound) {
-    findings.reasons = [okLine];
-    return { status: 'pass', details: findings };
-  }
-
-  // Partial: works but with missing sub-endpoints — surface them so the user can see what.
-  findings.reasons = [okLine, ...concerns];
-  return { status: 'warn', details: findings };
+  return { status: anyFound ? 'pass' : 'fail', details: findings };
 };

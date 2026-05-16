@@ -83,7 +83,6 @@ body {
 }
 
 .summary-card.summary-pass { border-left: 3px solid var(--success); }
-.summary-card.summary-warn { border-left: 3px solid var(--warning); }
 .summary-card.summary-fail { border-left: 3px solid var(--danger); }
 
 .summary-number {
@@ -92,7 +91,6 @@ body {
 }
 
 .summary-pass .summary-number { color: var(--success); }
-.summary-warn .summary-number { color: var(--warning); }
 .summary-fail .summary-number { color: var(--danger); }
 
 .summary-label {
@@ -592,16 +590,8 @@ body {
 }
 
 .status-dot.pass { background: var(--success); }
-.status-dot.warn { background: var(--warning); }
 .status-dot.fail { background: var(--danger); }
 .status-dot.unknown { background: var(--text-muted); }
-.text-warn { color: var(--warning); }
-.reason-warn { color: var(--warning); padding: 2px 0; font-size: 13px; }
-.summary-card.summary-warn .summary-number { color: var(--warning); }
-.check-badge.warn { background: rgba(240,180,41,0.12); color: var(--warning); }
-.status-badge.warn { background: rgba(240,180,41,0.18); color: var(--warning); }
-.status-card.warn { border-color: rgba(240,180,41,0.4); }
-.result-row.warn td { background: rgba(240,180,41,0.04); }
 
 /* Dashboard header (per-client) */
 .dashboard-header {

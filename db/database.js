@@ -63,29 +63,6 @@ function getDb() {
       db.exec('ALTER TABLE clients ADD COLUMN password_hash TEXT');
     }
 
-    // Migration: allow 'warn' in check_results.status. SQLite has no way to alter a
-    // CHECK constraint in place, so we recreate the table preserving rows + indexes.
-    const checkResultsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='check_results'").get();
-    if (checkResultsSql && !checkResultsSql.sql.includes("'warn'")) {
-      console.log('Migration: extending check_results.status to allow "warn"...');
-      db.exec(`
-        CREATE TABLE check_results_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
-          check_type TEXT NOT NULL,
-          status TEXT NOT NULL CHECK(status IN ('pass', 'warn', 'fail', 'error')),
-          details TEXT DEFAULT '{}',
-          checked_at TEXT DEFAULT (datetime('now'))
-        );
-        INSERT INTO check_results_new (id, site_id, check_type, status, details, checked_at)
-          SELECT id, site_id, check_type, status, details, checked_at FROM check_results;
-        DROP TABLE check_results;
-        ALTER TABLE check_results_new RENAME TO check_results;
-        CREATE INDEX IF NOT EXISTS idx_check_results_site_id ON check_results(site_id);
-        CREATE INDEX IF NOT EXISTS idx_check_results_checked_at ON check_results(checked_at);
-      `);
-    }
-
     // Backfill: if there are sites without a client_id, create a default CSOB client
     // and move them under it (preserves existing production data).
     const orphanCount = db.prepare('SELECT COUNT(*) AS c FROM sites WHERE client_id IS NULL').get().c;

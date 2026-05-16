@@ -1,10 +1,5 @@
 /**
  * Meta (Facebook) Pixel checker
- *
- * Status:
- *   pass — fbevents.js loaded AND fbq() active AND pixel fires observed
- *   warn — script/fbq present but no fire (often consent-blocked or pre-init)
- *   fail — nothing matched
  */
 module.exports = async function checkMetaPixel(page, interceptor, config) {
   const findings = {
@@ -62,32 +57,24 @@ module.exports = async function checkMetaPixel(page, interceptor, config) {
   }
 
   const fbeventsLoaded = interceptor.hasRequestMatching(/connect\.facebook\.net.*fbevents\.js/);
-  const scriptOrLoaded = findings.scriptFound || fbeventsLoaded;
-  const anyFound = scriptOrLoaded || findings.fbqFunction || findings.pixelFires > 0;
-  const allFound = scriptOrLoaded && findings.fbqFunction && findings.pixelFires > 0;
+  const hasPixel = findings.scriptFound || findings.fbqFunction || fbeventsLoaded;
 
-  const concerns = [];
-  if (!scriptOrLoaded) concerns.push('No fbevents.js script found in DOM or network');
-  if (!findings.fbqFunction) concerns.push('window.fbq function not available');
-  if (findings.pixelFires === 0) concerns.push('No pixel fire requests to facebook.com/tr');
+  // Build reasons
+  if (!findings.scriptFound && !fbeventsLoaded) findings.reasons.push('No fbevents.js script found in DOM or network');
+  if (!findings.fbqFunction) findings.reasons.push('window.fbq function not available');
+  if (findings.pixelFires === 0) findings.reasons.push('No pixel fire requests to facebook.com/tr');
 
-  if (!anyFound) {
-    findings.reasons = concerns;
-    return { status: 'fail', details: findings };
+  if (hasPixel) {
+    const parts = [];
+    if (findings.scriptFound || fbeventsLoaded) parts.push('fbevents.js loaded');
+    if (findings.fbqFunction) parts.push('fbq() active');
+    if (findings.pixelFires > 0) parts.push(`${findings.pixelFires} pixel fire(s): ${findings.events.join(', ')}`);
+    if (findings.pixelId) parts.push(`Pixel ID: ${findings.pixelId}`);
+    findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  const okParts = [];
-  if (scriptOrLoaded) okParts.push('fbevents.js loaded');
-  if (findings.fbqFunction) okParts.push('fbq() active');
-  if (findings.pixelFires > 0) okParts.push(`${findings.pixelFires} pixel fire(s): ${findings.events.join(', ')}`);
-  if (findings.pixelId) okParts.push(`Pixel ID: ${findings.pixelId}`);
-  const okLine = 'OK: ' + okParts.join(', ');
-
-  if (allFound) {
-    findings.reasons = [okLine];
-    return { status: 'pass', details: findings };
-  }
-
-  findings.reasons = [okLine, ...concerns];
-  return { status: 'warn', details: findings };
+  return {
+    status: hasPixel ? 'pass' : 'fail',
+    details: findings,
+  };
 };

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS check_results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
   check_type TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('pass', 'warn', 'fail', 'error')),
+  status TEXT NOT NULL CHECK(status IN ('pass', 'fail', 'error')),
   details TEXT DEFAULT '{}',
   checked_at TEXT DEFAULT (datetime('now'))
 );

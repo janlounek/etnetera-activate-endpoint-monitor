@@ -1,12 +1,7 @@
 /**
  * Exponea (Bloomreach) checker
  * Built-in endpoints: cdn.exponea.com, api.exponea.com, exponea/bloomreach script names.
- * Optional config.apiDomain: extra custom API domain to validate.
- *
- * Status:
- *   pass — script in DOM AND window.exponea object AND network traffic
- *   warn — partial: some signals present but not all
- *   fail — nothing matched
+ * Optional config.apiDomain: extra custom API domain to validate (e.g. data-api.example.com).
  */
 module.exports = async function checkExponea(page, interceptor, config) {
   const apiDomain = (config && config.apiDomain) ? String(config.apiDomain).trim() : '';
@@ -58,32 +53,20 @@ module.exports = async function checkExponea(page, interceptor, config) {
     catch (e) { return r.url.substring(0, 100); }
   });
 
-  const networkHit = findings.networkRequests > 0;
-  const anyFound = findings.scriptFound || findings.exponeaExists || networkHit;
-  const allFound = findings.scriptFound && findings.exponeaExists && networkHit;
+  const anyFound = findings.scriptFound || findings.exponeaExists || findings.networkRequests > 0;
 
-  const concerns = [];
-  if (!findings.scriptFound) concerns.push('No Exponea/Bloomreach script found in DOM');
-  if (!findings.exponeaExists) concerns.push('Exponea JS object not found (window.exponea)');
-  if (apiDomain && apiRequests.length === 0) concerns.push(`No requests to ${apiDomain}`);
-  if (cdnRequests.length === 0) concerns.push('No requests to cdn.exponea.com');
+  if (!findings.scriptFound) findings.reasons.push('No Exponea/Bloomreach script found in DOM');
+  if (!findings.exponeaExists) findings.reasons.push('Exponea JS object not found (window.exponea)');
+  if (apiDomain && apiRequests.length === 0) findings.reasons.push(`No requests to ${apiDomain}`);
+  if (cdnRequests.length === 0) findings.reasons.push('No requests to cdn.exponea.com');
 
-  if (!anyFound) {
-    findings.reasons = concerns;
-    return { status: 'fail', details: findings };
+  if (anyFound) {
+    const parts = [];
+    if (findings.scriptFound) parts.push('Exponea script in DOM');
+    if (findings.exponeaExists) parts.push('Exponea JS active');
+    if (findings.networkRequests > 0) parts.push(`${findings.networkRequests} API request(s)`);
+    findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  const okParts = [];
-  if (findings.scriptFound) okParts.push('Exponea script in DOM');
-  if (findings.exponeaExists) okParts.push('Exponea JS active');
-  if (findings.networkRequests > 0) okParts.push(`${findings.networkRequests} API request(s)`);
-  const okLine = 'OK: ' + okParts.join(', ');
-
-  if (allFound) {
-    findings.reasons = [okLine];
-    return { status: 'pass', details: findings };
-  }
-
-  findings.reasons = [okLine, ...concerns];
-  return { status: 'warn', details: findings };
+  return { status: anyFound ? 'pass' : 'fail', details: findings };
 };

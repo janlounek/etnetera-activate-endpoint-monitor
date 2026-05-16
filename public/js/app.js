@@ -43,14 +43,11 @@ function getReasons(details) {
   return [];
 }
 
-function formatReasons(details, status) {
+function formatReasons(details) {
   var reasons = getReasons(details);
   if (reasons.length === 0) return '';
   return reasons.map(function(r) {
-    var cls;
-    if (r.startsWith('OK:')) cls = 'reason-pass';
-    else if (status === 'warn') cls = 'reason-warn';
-    else cls = 'reason-fail';
+    var cls = r.startsWith('OK:') ? 'reason-pass' : 'reason-fail';
     return '<div class="' + cls + '">' + escapeHtml(r) + '</div>';
   }).join('');
 }
@@ -103,18 +100,11 @@ function enableRunBtn() {
 // --- Landing page (clients list) ---
 
 function renderClientCard(c) {
-  var failing = c.sites_failing || 0;
-  var warning = c.sites_warning || 0;
-  var statusClass, statusText, textCls;
-  if (c.sites_total === 0) {
-    statusClass = 'unknown'; statusText = 'No sites yet'; textCls = 'muted';
-  } else if (failing > 0) {
-    statusClass = 'fail'; statusText = failing + ' failing'; textCls = 'text-fail';
-  } else if (warning > 0) {
-    statusClass = 'warn'; statusText = warning + ' with warnings'; textCls = 'text-warn';
-  } else {
-    statusClass = 'pass'; statusText = 'All ' + c.sites_total + ' passing'; textCls = 'text-pass';
-  }
+  var hasFailing = c.sites_failing > 0;
+  var statusClass = hasFailing ? 'fail' : (c.sites_total > 0 ? 'pass' : 'unknown');
+  var statusText = c.sites_total === 0
+    ? 'No sites yet'
+    : (hasFailing ? c.sites_failing + ' failing' : 'All ' + c.sites_total + ' passing');
   var webhookBadge = c.has_webhook ? '' : '<span class="badge-warn" title="No Slack webhook configured">No Slack</span>';
   return '<a class="client-card" href="/c/' + escapeHtml(c.slug) + '">' +
     '<div class="client-card-head">' +
@@ -123,7 +113,7 @@ function renderClientCard(c) {
     '</div>' +
     '<div class="client-card-meta">' +
       '<span class="muted">' + c.sites_total + ' site' + (c.sites_total === 1 ? '' : 's') + '</span>' +
-      ' &middot; <span class="' + textCls + '">' + statusText + '</span>' +
+      ' &middot; <span class="' + (hasFailing ? 'text-fail' : 'text-pass') + '">' + statusText + '</span>' +
     '</div>' +
     '<div class="client-card-footer">' +
       '<code class="slug">/c/' + escapeHtml(c.slug) + '</code>' +
@@ -280,8 +270,6 @@ async function loadDashboard() {
 
     document.getElementById('total-sites').textContent = status.totalSites;
     document.getElementById('passing-sites').textContent = status.passing;
-    var warnEl = document.getElementById('warning-sites');
-    if (warnEl) warnEl.textContent = status.warning || 0;
     document.getElementById('failing-sites').textContent = status.failing;
 
     var tbody = document.getElementById('sites-tbody');
