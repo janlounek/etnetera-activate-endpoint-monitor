@@ -1,46 +1,83 @@
 /**
  * Adform checker
- * Endpoints: s2.adform.net, track.adform.net
+ * Matches any *.adform.net host (s2, track, a1, a2, tag, regional variants, etc.)
+ * plus the optional config.endpoint for first-party / proxied setups.
  */
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 module.exports = async function checkAdform(page, interceptor, config) {
+  const customEndpoint = (config && config.endpoint)
+    ? String(config.endpoint).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
+    : '';
+
   const findings = {
-    endpoints: { s2: false, track: false },
     scriptFound: false,
+    customEndpoint: customEndpoint || '(not configured)',
+    customEndpointRequests: 0,
     networkRequests: [],
+    hostsMatched: [],
+    totalRequests: 0,
     reasons: [],
   };
 
   findings.scriptFound = await page.evaluate(() => {
     return !!document.querySelector('script[src*="adform.net"]') ||
-           !!document.querySelector('script[src*="s2.adform.net"]') ||
-           !!document.querySelector('img[src*="track.adform.net"]');
+           !!document.querySelector('img[src*="adform.net"]');
   }).catch(() => false);
 
   if (!findings.scriptFound) {
     findings.scriptFound = await page.evaluate(() => {
       const scripts = document.querySelectorAll('script');
       for (const s of scripts) {
-        if (s.textContent && s.textContent.includes('adform.net')) return true;
+        if (s.textContent && (s.textContent.includes('adform.net') || s.textContent.includes('Adform'))) return true;
       }
       return false;
     }).catch(() => false);
   }
 
-  const s2Requests = interceptor.getRequestsMatching(/s2\.adform\.net/);
-  findings.endpoints.s2 = s2Requests.length > 0;
-  if (s2Requests.length > 0) findings.networkRequests.push(`s2.adform.net: ${s2Requests.length} request(s)`);
+  // Any *.adform.net request counts — not just s2/track. Many sites use a1/a2,
+  // tag, regional shards, or other subdomains depending on integration mode.
+  const adformRequests = interceptor.getRequestsMatching(/adform\.net/);
+  findings.totalRequests = adformRequests.length;
 
-  const trackRequests = interceptor.getRequestsMatching(/track\.adform\.net/);
-  findings.endpoints.track = trackRequests.length > 0;
-  if (trackRequests.length > 0) findings.networkRequests.push(`track.adform.net: ${trackRequests.length} request(s)`);
+  // Bucket by host for legibility in the OK summary / Raw JSON view.
+  const byHost = {};
+  for (const r of adformRequests) {
+    try {
+      const host = new URL(r.url).hostname;
+      byHost[host] = (byHost[host] || 0) + 1;
+    } catch (e) {}
+  }
+  findings.hostsMatched = Object.keys(byHost).sort();
+  for (const host of findings.hostsMatched) {
+    findings.networkRequests.push(`${host}: ${byHost[host]} request(s)`);
+  }
 
-  const anyFound = findings.scriptFound || findings.endpoints.s2 || findings.endpoints.track;
+  // Optional: first-party / proxy endpoint (rare for Adform but possible).
+  if (customEndpoint) {
+    const customRegex = new RegExp(escapeRegex(customEndpoint));
+    const customMatches = interceptor.getRequestsMatching(customRegex).filter(r => !/adform\.net/.test(r.url));
+    findings.customEndpointRequests = customMatches.length;
+    if (findings.customEndpointRequests > 0) {
+      findings.totalRequests += findings.customEndpointRequests;
+      findings.networkRequests.push(`${customEndpoint}: ${findings.customEndpointRequests} request(s)`);
+    }
+  }
 
-  if (!findings.scriptFound) findings.reasons.push('No Adform script tag found in DOM');
-  if (!findings.endpoints.s2) findings.reasons.push('No requests to s2.adform.net');
-  if (!findings.endpoints.track) findings.reasons.push('No requests to track.adform.net');
+  const hasNetwork = findings.totalRequests > 0;
+  const pass = findings.scriptFound || hasNetwork;
 
-  if (anyFound) findings.reasons = ['OK: ' + findings.networkRequests.join(', ') + (findings.scriptFound ? ', script in DOM' : '')];
+  if (!pass) {
+    findings.reasons.push('No Adform script tag found in DOM');
+    findings.reasons.push('No requests to *.adform.net' + (customEndpoint ? ` or ${customEndpoint}` : ''));
+    return { status: 'fail', details: findings };
+  }
 
-  return { status: anyFound ? 'pass' : 'fail', details: findings };
+  const parts = [];
+  if (findings.scriptFound) parts.push('Adform script in DOM');
+  if (findings.networkRequests.length) parts.push(findings.networkRequests.join(', '));
+  findings.reasons = ['OK: ' + parts.join(', ')];
+  return { status: 'pass', details: findings };
 };

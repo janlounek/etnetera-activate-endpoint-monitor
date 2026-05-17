@@ -62,7 +62,8 @@
               <% } else if (type === 'google_ads') { %>
                 <small class="help-text">Checks: googleads.g.doubleclick.net, google.com, google.cz</small>
               <% } else if (type === 'adform') { %>
-                <small class="help-text">Checks: s2.adform.net, track.adform.net</small>
+                <input type="text" name="config_<%= type %>_endpoint" placeholder="Custom Adform endpoint (optional, first-party proxy)" value="<%= getConfigVal(type, 'endpoint') %>">
+                <small class="help-text">Matches any <code>*.adform.net</code> host by default (s2, track, a1, tag, regional variants). Add a custom endpoint only for first-party / proxied setups.</small>
               <% } else if (type === 'adobe_analytics') { %>
                 <input type="text" name="config_<%= type %>_trackingDomain" placeholder="Custom tracking domain (optional, e.g. analytics.example.com)" value="<%= getConfigVal(type, 'trackingDomain') %>">
                 <input type="text" name="config_<%= type %>_reportingSuite" placeholder="Reporting Suite ID (optional)" value="<%= getConfigVal(type, 'reportingSuite') %>">
