@@ -3,6 +3,10 @@
  * Built-in endpoints: cdn.exponea.com, api.exponea.com, exponea/bloomreach script names.
  * Optional config.apiDomain: extra custom API domain to validate (e.g. data-api.example.com).
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
+function escapeRegexEx(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 module.exports = async function checkExponea(page, interceptor, config) {
   const apiDomain = (config && config.apiDomain) ? String(config.apiDomain).trim() : '';
 
@@ -68,5 +72,11 @@ module.exports = async function checkExponea(page, interceptor, config) {
     findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  return { status: anyFound ? 'pass' : 'fail', details: findings };
+  const result = { status: anyFound ? 'pass' : 'fail', details: findings };
+  const patterns = [/cdn\.exponea\.com/, /api\.exponea\.com/, /\.bloomreach\.com/];
+  if (apiDomain) patterns.push(new RegExp(escapeRegexEx(apiDomain)));
+  const delivery = evaluateDelivery(interceptor, patterns);
+  return applyDeliveryOverride(result, 'Exponea', delivery, {
+    codePresent: findings.scriptFound || findings.exponeaExists,
+  });
 };

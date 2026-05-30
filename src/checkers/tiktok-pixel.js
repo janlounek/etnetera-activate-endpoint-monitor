@@ -1,6 +1,8 @@
 /**
  * TikTok Pixel checker
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 module.exports = async function checkTikTokPixel(page, interceptor, config) {
   const findings = {
     scriptFound: false,
@@ -48,8 +50,7 @@ module.exports = async function checkTikTokPixel(page, interceptor, config) {
 
   const hasPixel = findings.scriptFound || findings.ttqExists;
 
-  return {
-    status: hasPixel ? 'pass' : 'fail',
-    details: findings,
-  };
+  const result = { status: hasPixel ? 'pass' : 'fail', details: findings };
+  const delivery = evaluateDelivery(interceptor, [/analytics\.tiktok\.com/, /\.tiktok\.com\/i18n\/pixel/]);
+  return applyDeliveryOverride(result, 'TikTok Pixel', delivery, { codePresent: hasPixel });
 };

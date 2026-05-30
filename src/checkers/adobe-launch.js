@@ -4,6 +4,10 @@
  * Built-in endpoints: assets.adobedtm.com, adoberesources.net, launch-* scripts.
  * Optional config.customDomain: extra custom domain to validate (e.g. tags.example.com).
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
+function escapeRegexAL(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 module.exports = async function checkAdobeLaunch(page, interceptor, config) {
   const customDomain = (config && config.customDomain) ? String(config.customDomain).trim() : '';
 
@@ -82,5 +86,11 @@ module.exports = async function checkAdobeLaunch(page, interceptor, config) {
     if (customDomain) findings.reasons.push('No requests to ' + customDomain);
   }
 
-  return { status: anyFound ? 'pass' : 'fail', details: findings };
+  const result = { status: anyFound ? 'pass' : 'fail', details: findings };
+  const patterns = [/assets\.adobedtm\.com/, /adoberesources\.net/, /launch-[a-zA-Z0-9]+/];
+  if (customDomain) patterns.push(new RegExp(escapeRegexAL(customDomain)));
+  const delivery = evaluateDelivery(interceptor, patterns);
+  return applyDeliveryOverride(result, 'Adobe Launch', delivery, {
+    codePresent: findings.scriptFound || findings.satelliteExists,
+  });
 };

@@ -3,6 +3,7 @@
  * Default endpoint: cdn.cookielaw.org (some sites self-host or use a custom CDN — override via config.endpoint)
  */
 const DEFAULT_ENDPOINT = 'cdn.cookielaw.org';
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -58,5 +59,9 @@ module.exports = async function checkOneTrust(page, interceptor, config) {
     findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  return { status: anyFound ? 'pass' : 'fail', details: findings };
+  const result = { status: anyFound ? 'pass' : 'fail', details: findings };
+  const delivery = evaluateDelivery(interceptor, [new RegExp(escapeRegex(endpoint)), /otSDKStub/]);
+  return applyDeliveryOverride(result, 'OneTrust', delivery, {
+    codePresent: findings.scriptFound || findings.oneTrustExists,
+  });
 };

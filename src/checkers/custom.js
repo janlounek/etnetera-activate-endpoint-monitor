@@ -2,6 +2,8 @@
  * Custom script/variable checker.
  * Config: { scriptUrl?: string, globalVar?: string, name?: string }
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 module.exports = async function checkCustom(page, interceptor, config) {
   const findings = {
     name: config.name || 'Custom check',
@@ -54,8 +56,15 @@ module.exports = async function checkCustom(page, interceptor, config) {
     };
   }
 
-  return {
-    status: allPassed ? 'pass' : 'fail',
-    details: findings,
-  };
+  const result = { status: allPassed ? 'pass' : 'fail', details: findings };
+
+  // If a script URL was configured, a CSP/network block on it means the custom
+  // resource never loaded — fail even if the <script> tag is present in the DOM.
+  if (config.scriptUrl) {
+    const escapedUrl = config.scriptUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const delivery = evaluateDelivery(interceptor, [new RegExp(escapedUrl)]);
+    return applyDeliveryOverride(result, findings.name, delivery, { codePresent: !!findings.scriptFound });
+  }
+
+  return result;
 };

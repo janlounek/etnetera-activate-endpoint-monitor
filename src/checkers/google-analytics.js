@@ -11,6 +11,8 @@
  * Passes when EITHER a client-side GA/gtag fingerprint is present OR there
  * are recognizable GA collect beacons going somewhere (Google or proxy).
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -114,21 +116,24 @@ module.exports = async function checkGoogleAnalytics(page, interceptor, config) 
     findings.reasons.push(customEndpoint
       ? `No collect/beacon requests detected (also checked ${customEndpoint})`
       : 'No /g/collect or google-analytics.com requests detected');
-    return { status: 'fail', details: findings };
+  } else {
+    const parts = [];
+    if (findings.scriptType) parts.push(findings.scriptType);
+    else if (findings.serverSideDetected) parts.push('server-side GTM (no client gtag)');
+    if (findings.measurementId) parts.push(`ID: ${findings.measurementId}`);
+    if (findings.collectRequests > 0) {
+      let line = `${findings.collectRequests} collect request(s)`;
+      if (findings.customEndpointRequests > 0) line += ` (${findings.customEndpointRequests} via ${customEndpoint})`;
+      else if (findings.proxyEndpointRequests > 0 && findings.sampleEndpoints.length) line += ` via ${findings.sampleEndpoints[0]}`;
+      parts.push(line);
+    }
+    if (findings.dataLayerExists) parts.push(`${dataLayerName} active`);
+    findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  const parts = [];
-  if (findings.scriptType) parts.push(findings.scriptType);
-  else if (findings.serverSideDetected) parts.push('server-side GTM (no client gtag)');
-  if (findings.measurementId) parts.push(`ID: ${findings.measurementId}`);
-  if (findings.collectRequests > 0) {
-    let line = `${findings.collectRequests} collect request(s)`;
-    if (findings.customEndpointRequests > 0) line += ` (${findings.customEndpointRequests} via ${customEndpoint})`;
-    else if (findings.proxyEndpointRequests > 0 && findings.sampleEndpoints.length) line += ` via ${findings.sampleEndpoints[0]}`;
-    parts.push(line);
-  }
-  if (findings.dataLayerExists) parts.push(`${dataLayerName} active`);
-  findings.reasons = ['OK: ' + parts.join(', ')];
-
-  return { status: 'pass', details: findings };
+  const result = { status: pass ? 'pass' : 'fail', details: findings };
+  const patterns = [/\/g\/collect/, /google-analytics\.com\/collect/, /googletagmanager\.com\/gtag/];
+  if (customEndpoint) patterns.push(new RegExp(escapeRegex(customEndpoint)));
+  const delivery = evaluateDelivery(interceptor, patterns);
+  return applyDeliveryOverride(result, 'Google Analytics', delivery, { codePresent: hasClientScript });
 };

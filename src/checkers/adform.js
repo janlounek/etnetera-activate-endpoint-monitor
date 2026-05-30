@@ -3,6 +3,8 @@
  * Matches any *.adform.net host (s2, track, a1, a2, tag, regional variants, etc.)
  * plus the optional config.endpoint for first-party / proxied setups.
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -72,12 +74,16 @@ module.exports = async function checkAdform(page, interceptor, config) {
   if (!pass) {
     findings.reasons.push('No Adform script tag found in DOM');
     findings.reasons.push('No requests to *.adform.net' + (customEndpoint ? ` or ${customEndpoint}` : ''));
-    return { status: 'fail', details: findings };
+  } else {
+    const parts = [];
+    if (findings.scriptFound) parts.push('Adform script in DOM');
+    if (findings.networkRequests.length) parts.push(findings.networkRequests.join(', '));
+    findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  const parts = [];
-  if (findings.scriptFound) parts.push('Adform script in DOM');
-  if (findings.networkRequests.length) parts.push(findings.networkRequests.join(', '));
-  findings.reasons = ['OK: ' + parts.join(', ')];
-  return { status: 'pass', details: findings };
+  const result = { status: pass ? 'pass' : 'fail', details: findings };
+  const patterns = [/adform\.net/];
+  if (customEndpoint) patterns.push(new RegExp(escapeRegex(customEndpoint)));
+  const delivery = evaluateDelivery(interceptor, patterns);
+  return applyDeliveryOverride(result, 'Adform', delivery, { codePresent: findings.scriptFound });
 };

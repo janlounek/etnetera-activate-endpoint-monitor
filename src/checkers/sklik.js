@@ -2,6 +2,8 @@
  * Sklik (Seznam) checker
  * Endpoints: c.seznam.cz, h.seznam.cz
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 module.exports = async function checkSklik(page, interceptor, config) {
   const findings = {
     endpoints: { cSeznam: false, hSeznam: false },
@@ -52,5 +54,7 @@ module.exports = async function checkSklik(page, interceptor, config) {
     findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  return { status: anyFound ? 'pass' : 'fail', details: findings };
+  const result = { status: anyFound ? 'pass' : 'fail', details: findings };
+  const delivery = evaluateDelivery(interceptor, [/c\.seznam\.cz/, /h\.seznam\.cz/]);
+  return applyDeliveryOverride(result, 'Sklik', delivery, { codePresent: findings.scriptFound });
 };

@@ -8,6 +8,8 @@
  *                   (e.g. for server-side GTM or multiple containers) need
  *                   this to be set so detection looks at the right global.
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 module.exports = async function checkGTM(page, interceptor, config) {
   const dataLayerName = (config && config.dataLayerName) ? String(config.dataLayerName).trim() : 'dataLayer';
 
@@ -77,5 +79,9 @@ module.exports = async function checkGTM(page, interceptor, config) {
     findings.reasons = ['OK: ' + parts.join(', ')];
   }
 
-  return { status: hasGtm && hasDataLayer ? 'pass' : 'fail', details: findings };
+  const result = { status: hasGtm && hasDataLayer ? 'pass' : 'fail', details: findings };
+  const delivery = evaluateDelivery(interceptor, [/googletagmanager\.com\/gtm\.js/]);
+  return applyDeliveryOverride(result, 'Google Tag Manager', delivery, {
+    codePresent: findings.scriptFound || findings.dataLayerExists,
+  });
 };

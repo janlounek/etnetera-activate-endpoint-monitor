@@ -4,6 +4,8 @@
  * Endpoints: googleads.g.doubleclick.net, google.com, google.cz, googleadservices.com,
  *            pagead2.googlesyndication.com, google conversion linker
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 module.exports = async function checkGoogleAds(page, interceptor, config) {
   const findings = {
     scriptFound: false,
@@ -93,5 +95,12 @@ module.exports = async function checkGoogleAds(page, interceptor, config) {
     findings.reasons.push('No network requests to doubleclick.net, googleadservices.com, or googlesyndication.com');
   }
 
-  return { status: anyFound ? 'pass' : 'fail', details: findings };
+  const result = { status: anyFound ? 'pass' : 'fail', details: findings };
+  const delivery = evaluateDelivery(interceptor, [
+    /doubleclick\.net/, /googleadservices\.com/, /googlesyndication\.com/,
+    /google\.(com|cz)\/pagead/, /google\.(com|cz)\/ads/,
+  ]);
+  return applyDeliveryOverride(result, 'Google Ads', delivery, {
+    codePresent: findings.scriptFound || findings.gtagWithAds || findings.conversionLinker,
+  });
 };

@@ -1,6 +1,8 @@
 /**
  * Segment Analytics checker
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
 module.exports = async function checkSegment(page, interceptor, config) {
   const findings = {
     scriptFound: false,
@@ -53,8 +55,9 @@ module.exports = async function checkSegment(page, interceptor, config) {
 
   const hasSegment = findings.scriptFound || findings.analyticsObject || findings.cdnLoaded;
 
-  return {
-    status: hasSegment ? 'pass' : 'fail',
-    details: findings,
-  };
+  const result = { status: hasSegment ? 'pass' : 'fail', details: findings };
+  const delivery = evaluateDelivery(interceptor, [/cdn\.segment\.(com|io)/, /api\.segment\.(com|io)/]);
+  return applyDeliveryOverride(result, 'Segment', delivery, {
+    codePresent: findings.scriptFound || findings.analyticsObject,
+  });
 };

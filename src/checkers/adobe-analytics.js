@@ -5,6 +5,10 @@
  * Optional config.trackingDomain: extra custom domain to validate (e.g. analytics.example.com).
  * Optional config.reportingSuite: expected RSID to validate in requests.
  */
+const { evaluateDelivery, applyDeliveryOverride } = require('./_delivery');
+
+function escapeRegexAA(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 module.exports = async function checkAdobeAnalytics(page, interceptor, config) {
   const trackingDomain = (config && config.trackingDomain) ? String(config.trackingDomain).trim() : '';
   const expectedRsid = (config && config.reportingSuite) ? String(config.reportingSuite).trim() : '';
@@ -202,5 +206,9 @@ module.exports = async function checkAdobeAnalytics(page, interceptor, config) {
     findings.reasons.push('No requests to adobedc.net or omtrdc.net' + (trackingDomain ? ' or ' + trackingDomain : ''));
   }
 
-  return { status: pass ? 'pass' : 'fail', details: findings };
+  const result = { status: pass ? 'pass' : 'fail', details: findings };
+  const patterns = [/\/b\/ss\//, /2o7\.net/, /omtrdc\.net/, /demdex\.net/, /adobedc\.net/];
+  if (trackingDomain) patterns.push(new RegExp(escapeRegexAA(trackingDomain)));
+  const delivery = evaluateDelivery(interceptor, patterns);
+  return applyDeliveryOverride(result, 'Adobe Analytics', delivery, { codePresent: hasLegacy || hasEdge });
 };
