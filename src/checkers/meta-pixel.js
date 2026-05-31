@@ -8,6 +8,8 @@
  * Content-Security-Policy (a common misconfiguration), the pixel delivers nothing
  * and the check must fail even though all the DOM/JS fingerprints are present.
  */
+const { isDeliveryFailure, isCspFailure } = require('./_delivery');
+
 module.exports = async function checkMetaPixel(page, interceptor, config) {
   const findings = {
     scriptFound: false,
@@ -56,10 +58,14 @@ module.exports = async function checkMetaPixel(page, interceptor, config) {
 
   if (!findings.pixelId && config.pixelId) findings.pixelId = config.pixelId;
 
-  // Beacons to facebook.com/tr — split into successful vs. failed (CSP-blocked etc.).
+  // Beacons to facebook.com/tr — split into successful vs. genuinely failed.
+  // Benign cancellations (ERR_ABORTED) and unknown errors are filtered out so we
+  // only fail on real blocks/failures (see _delivery.isDeliveryFailure).
   const pixelRequests = interceptor.getRequestsMatching(/facebook\.com\/tr/);
   const successfulFires = interceptor.getSuccessfulRequestsMatching(/facebook\.com\/tr/);
-  const blockedFires = interceptor.getFailedRequestsMatching(/facebook\.com\/tr/);
+  const blockedFires = interceptor.getFailedRequestsMatching(/facebook\.com\/tr/).filter(r => isDeliveryFailure(r.error));
+  // The fbevents.js loader being blocked also breaks the pixel (it can never fire).
+  const blockedLoader = interceptor.getFailedRequestsMatching(/connect\.facebook\.net/).filter(r => isDeliveryFailure(r.error));
   findings.pixelFires = pixelRequests.length;
   findings.pixelFiresSuccessful = successfulFires.length;
   findings.pixelFiresBlocked = blockedFires.length;
@@ -73,8 +79,8 @@ module.exports = async function checkMetaPixel(page, interceptor, config) {
 
   // CSP enforcement against any Facebook host (fbevents loader or the /tr beacon).
   const cspViolations = interceptor.getCspViolationsMatching(/facebook\.com|connect\.facebook\.net|fbcdn\.net/i);
-  const cspBlockedFire = blockedFires.some(r => /csp/i.test(r.error || ''));
-  findings.cspBlocked = cspViolations.length > 0 || cspBlockedFire;
+  const cspBlockedReq = blockedFires.concat(blockedLoader).some(r => isCspFailure(r.error));
+  findings.cspBlocked = cspViolations.length > 0 || cspBlockedReq;
   if (cspViolations.length && cspViolations[0].directive) {
     // Keep just the directive name (e.g. "img-src"), not the whole allow-list.
     findings.cspDirective = String(cspViolations[0].directive).trim().split(/\s+/)[0];
@@ -82,7 +88,7 @@ module.exports = async function checkMetaPixel(page, interceptor, config) {
 
   const fbeventsLoaded = interceptor.getSuccessfulRequestsMatching(/connect\.facebook\.net.*fbevents\.js/).length > 0;
   const presence = findings.scriptFound || findings.fbqFunction || fbeventsLoaded;
-  const deliveryFailed = findings.pixelFiresBlocked > 0 || findings.cspBlocked;
+  const deliveryFailed = findings.pixelFiresBlocked > 0 || blockedLoader.length > 0 || findings.cspBlocked;
 
   let pass;
   if (findings.pixelFiresSuccessful > 0) {

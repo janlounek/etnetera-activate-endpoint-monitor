@@ -17,6 +17,25 @@ function toRegex(p) {
   return p instanceof RegExp ? p : new RegExp(p, 'i');
 }
 
+// Classify a failed (status-0) request. We only want to treat a request as a
+// real "delivery failure" when the browser actively refused it or couldn't
+// reach the endpoint — NOT when the page/tracker cancelled it itself
+// (net::ERR_ABORTED, common and benign), or when the reason is unknown. This
+// keeps the override safe across arbitrary domains.
+function isDeliveryFailure(error) {
+  const e = String(error || '').toLowerCase();
+  if (!e || e === 'unknown') return false;   // no concrete reason — don't assume failure
+  if (e.includes('abort')) return false;     // request cancelled (navigation, tracker, etc.)
+  // csp, err_blocked_by_*, err_connection_*, err_name_not_resolved, err_timed_out,
+  // err_ssl_*, err_cert_*, err_address_unreachable, err_failed, etc. — all real.
+  return true;
+}
+
+function isCspFailure(error) {
+  const e = String(error || '').toLowerCase();
+  return e.includes('csp') || e.includes('blocked_by_csp') || e.includes('content_security');
+}
+
 /**
  * @param interceptor  network interceptor from createInterceptor()
  * @param patterns     RegExp | RegExp[] matching the endpoint's delivery URLs
@@ -37,9 +56,10 @@ function evaluateDelivery(interceptor, patterns) {
     attempted += interceptor.getRequestsMatching(re).length;
 
     const failed = interceptor.getFailedRequestsMatching(re);
-    blocked += failed.length;
     for (const f of failed) {
-      if (/csp/i.test(f.error || '')) cspBlocked = true;
+      if (isCspFailure(f.error)) cspBlocked = true;
+      if (!isDeliveryFailure(f.error)) continue;  // skip benign aborts / unknown
+      blocked += 1;
       if (blockedUrls.length < 5 && !blockedUrls.includes(f.url)) blockedUrls.push(f.url);
     }
 
@@ -96,4 +116,4 @@ function applyDeliveryOverride(result, label, delivery, opts) {
   return result;
 }
 
-module.exports = { evaluateDelivery, blockedReason, applyDeliveryOverride };
+module.exports = { evaluateDelivery, blockedReason, applyDeliveryOverride, isDeliveryFailure, isCspFailure };
